@@ -10,8 +10,14 @@
     "test": "jest"
   },
   "dependencies": {
+    "@popmotion/popcorn": "^0.4.4",
+    "d3-shape": "^3.2.0",
+    "expo": "^49.0.4",
+    "randomcolor": "^0.6.2",
     "react": "18.2.0",
-    "react-native": "0.72.3"
+    "react-native": "0.72.3",
+    "react-native-gesture-handler": "^2.12.0",
+    "react-native-svg": "^13.10.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
@@ -20,6 +26,8 @@
     "@react-native/eslint-config": "^0.72.2",
     "@react-native/metro-config": "^0.72.9",
     "@tsconfig/react-native": "^3.0.0",
+    "@types/d3-shape": "^3.1.1",
+    "@types/randomcolor": "^0.5.7",
     "@types/react": "^18.0.24",
     "@types/react-test-renderer": "^18.0.0",
     "babel-jest": "^29.2.1",

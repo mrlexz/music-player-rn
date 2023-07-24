@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 /**
  * Sample React Native App
  * https://github.com/facebook/react-native
@@ -5,113 +6,249 @@
  * @format
  */
 
-import React from 'react';
-import type {PropsWithChildren} from 'react';
+import React, {useEffect} from 'react';
+import {StyleSheet, View, Dimensions, Animated, Text} from 'react-native';
 import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
+  GestureHandlerRootView,
+  HandlerStateChangeEvent,
+  PanGestureHandler,
+  PanGestureHandlerEventPayload,
+  State,
+} from 'react-native-gesture-handler';
+import {Path, G, Text as SvgText, TSpan, Svg} from 'react-native-svg';
+import color from 'randomcolor';
+import * as d3Shape from 'd3-shape';
+import {snap} from '@popmotion/popcorn';
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+const {width} = Dimensions.get('screen');
 
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
+const numOfSegments = 10;
+const wheelSize = width * 0.9;
+const fontSize = 26;
+const oneTurn = 360;
+const angleBySegment = oneTurn / numOfSegments;
+const angleOffset = angleBySegment / 2;
+const knobFill = color({hue: 'purple'});
 
-function Section({children, title}: SectionProps): JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-}
+const makeWheel = () => {
+  const data = Array.from({length: numOfSegments}).fill(1) as Array<number>;
+  const arcs = d3Shape.pie()(data);
+  const colors = color({
+    luminosity: 'dark',
+    count: numOfSegments,
+  });
+
+  return arcs.map((arc, index) => {
+    const instance = d3Shape
+      .arc()
+      .padAngle(0.01)
+      .outerRadius(width / 2)
+      .innerRadius(20);
+    return {
+      path: instance(arc),
+      color: colors[index],
+      value: Math.round(Math.random() * 10 + 1) * 200,
+      centroid: instance.centroid(arc),
+    };
+  });
+};
 
 function App(): JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+  const [enabled, setEnabled] = React.useState(true);
+  const [angle, setAngle] = React.useState(0);
+  const [winner, setWinner] = React.useState<number | null>(null);
+  const [finished, setFinished] = React.useState(false);
+  const _wheelPaths = React.useMemo(() => makeWheel(), []);
+  const _angle = React.useRef(new Animated.Value(0)).current;
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
+  useEffect(() => {
+    _angle.addListener(event => {
+      if (enabled) {
+        setEnabled(false);
+        setFinished(false);
+      }
+      setAngle(event.value);
+    });
+  }, [_angle, enabled]);
+
+  const _getWinnerIndex = () => {
+    const deg = Math.abs(Math.round(angle % oneTurn));
+    return Math.floor(deg / angleBySegment);
+  };
+
+  const _onPan = ({
+    nativeEvent,
+  }: HandlerStateChangeEvent<PanGestureHandlerEventPayload>) => {
+    if (nativeEvent.state === State.END) {
+      const {velocityY} = nativeEvent;
+
+      Animated.decay(_angle, {
+        velocity: velocityY / 1000,
+        deceleration: 0.999,
+        useNativeDriver: true,
+      }).start(() => {
+        _angle.setValue(angle % oneTurn);
+        const snapTo = snap(oneTurn / numOfSegments);
+        Animated.timing(_angle, {
+          toValue: snapTo(angle),
+          duration: 300,
+          useNativeDriver: true,
+        }).start(() => {
+          const winnerIndex = _getWinnerIndex();
+          setWinner(_wheelPaths[winnerIndex].value);
+          setFinished(true);
+          setEnabled(true);
+        });
+      });
+    }
+  };
+
+  const renderKnob = () => {
+    const knobSize = 30;
+    const YOLO = Animated.modulo(
+      Animated.divide(
+        Animated.modulo(Animated.subtract(_angle, angleOffset), oneTurn),
+        new Animated.Value(angleBySegment),
+      ),
+      1,
+    );
+    return (
+      <Animated.View
+        style={[
+          styles.knobContainer,
+          {
+            width: knobSize,
+            height: knobSize * 2,
+            transform: [
+              {
+                rotate: YOLO.interpolate({
+                  inputRange: [-1, -0.5, -0.0001, 0.0001, 0.5, 1],
+                  outputRange: [
+                    '0deg',
+                    '0deg',
+                    '35deg',
+                    '-35deg',
+                    '0deg',
+                    '0deg',
+                  ],
+                }),
+              },
+            ],
+          },
+        ]}>
+        <Svg
+          width={knobSize}
+          height={(knobSize * 100) / 57}
+          viewBox={'0 0 57 100'}
+          style={{transform: [{translateY: 8}]}}>
+          <Path
+            d="M28.034,0C12.552,0,0,12.552,0,28.034S28.034,100,28.034,100s28.034-56.483,28.034-71.966S43.517,0,28.034,0z   M28.034,40.477c-6.871,0-12.442-5.572-12.442-12.442c0-6.872,5.571-12.442,12.442-12.442c6.872,0,12.442,5.57,12.442,12.442  C40.477,34.905,34.906,40.477,28.034,40.477z"
+            fill={knobFill}
+          />
+        </Svg>
+      </Animated.View>
+    );
+  };
+
+  const renderSvgView = () => {
+    return (
+      <View style={styles.svgViewContainer}>
+        {renderKnob()}
+        <Animated.View
+          style={{
+            justifyContent: 'center',
+            alignItems: 'center',
+            transform: [
+              {
+                rotate: _angle.interpolate({
+                  inputRange: [-oneTurn, 0, oneTurn],
+                  outputRange: [`-${oneTurn}deg`, '0deg', `${oneTurn}deg`],
+                }),
+              },
+            ],
+          }}>
+          <Svg
+            width={wheelSize}
+            height={wheelSize}
+            viewBox={`0 0 ${width} ${width}`}
+            style={{transform: [{rotate: `-${angleOffset}deg`}]}}>
+            <G x={width / 2} y={width / 2}>
+              {_wheelPaths.map((arc, index) => {
+                const [x, y] = arc.centroid;
+                const number = arc.value.toString();
+                return (
+                  <G key={`arc-${index}`}>
+                    <Path d={arc.path} fill={arc.color} />
+                    <G
+                      rotation={(index * oneTurn) / numOfSegments + angleOffset}
+                      origin={`${x}, ${y}`}>
+                      <SvgText
+                        fontSize={fontSize}
+                        x={x}
+                        y={y - 70}
+                        fill="white"
+                        textAnchor="middle">
+                        {Array.from({length: number.length}).map((_, j) => {
+                          return (
+                            <TSpan
+                              key={`arc-${index}-slice-${j}`}
+                              x={x}
+                              dy={20}
+                              textAnchor="middle">
+                              {number.charAt(j)}
+                            </TSpan>
+                          );
+                        })}
+                      </SvgText>
+                    </G>
+                  </G>
+                );
+              })}
+            </G>
+          </Svg>
+        </Animated.View>
+      </View>
+    );
   };
 
   return (
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+    <>
+      <View style={{flex: 1}}>
+        <GestureHandlerRootView style={{flex: 1, backgroundColor: 'gray'}}>
+          <PanGestureHandler enabled={enabled} onHandlerStateChange={_onPan}>
+            <View style={styles.container}>
+              {renderSvgView()}
+              {winner && finished ? (
+                <View style={styles.winnerContainer}>
+                  <Text>Winner is: {winner}</Text>
+                </View>
+              ) : null}
+            </View>
+          </PanGestureHandler>
+        </GestureHandlerRootView>
+      </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
   },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
+  svgViewContainer: {
+    marginTop: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
+  winnerContainer: {
+    flex: 1,
+    marginTop: 100,
   },
-  highlight: {
-    fontWeight: '700',
+  knobContainer: {
+    justifyContent: 'center',
+    zIndex: 1,
   },
 });
 
