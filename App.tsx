@@ -47,7 +47,7 @@ const makeWheel = () => {
     return {
       path: instance(arc),
       color: colors[index],
-      value: Math.round(Math.random() * 10 + 1) * 200,
+      value: `${index}`,
       centroid: instance.centroid(arc),
     };
   });
@@ -55,25 +55,33 @@ const makeWheel = () => {
 
 function App(): JSX.Element {
   const [enabled, setEnabled] = React.useState(true);
-  const [angle, setAngle] = React.useState(0);
+  const angle = React.useRef(0);
   const [winner, setWinner] = React.useState<number | null>(null);
   const [finished, setFinished] = React.useState(false);
   const _wheelPaths = React.useMemo(() => makeWheel(), []);
   const _angle = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    _angle.addListener(event => {
+    const events = _angle.addListener(event => {
       if (enabled) {
         setEnabled(false);
         setFinished(false);
       }
-      setAngle(event.value);
+      angle.current = event.value;
     });
+    return () => {
+      _angle.removeListener(events);
+    };
   }, [_angle, enabled]);
 
   const _getWinnerIndex = () => {
-    const deg = Math.abs(Math.round(angle % oneTurn));
-    return Math.floor(deg / angleBySegment);
+    const deg = Math.abs(Math.round(angle.current % oneTurn));
+    // wheel turning counterclockwise
+    if (angle.current < 0) {
+      return Math.floor(deg / angleBySegment);
+    }
+    // wheel turning clockwise
+    return (numOfSegments - Math.floor(deg / angleBySegment)) % numOfSegments;
   };
 
   const _onPan = ({
@@ -87,15 +95,15 @@ function App(): JSX.Element {
         deceleration: 0.999,
         useNativeDriver: true,
       }).start(() => {
-        _angle.setValue(angle % oneTurn);
+        _angle.setValue(angle.current % oneTurn);
         const snapTo = snap(oneTurn / numOfSegments);
         Animated.timing(_angle, {
-          toValue: snapTo(angle),
+          toValue: snapTo(angle.current),
           duration: 300,
           useNativeDriver: true,
         }).start(() => {
           const winnerIndex = _getWinnerIndex();
-          setWinner(_wheelPaths[winnerIndex].value);
+          setWinner(+_wheelPaths[winnerIndex].value);
           setFinished(true);
           setEnabled(true);
         });
@@ -175,7 +183,6 @@ function App(): JSX.Element {
             <G x={width / 2} y={width / 2}>
               {_wheelPaths.map((arc, index) => {
                 const [x, y] = arc.centroid;
-                const number = arc.value.toString();
                 return (
                   <G key={`arc-${index}`}>
                     <Path d={arc.path} fill={arc.color} />
@@ -188,17 +195,13 @@ function App(): JSX.Element {
                         y={y - 70}
                         fill="white"
                         textAnchor="middle">
-                        {Array.from({length: number.length}).map((_, j) => {
-                          return (
-                            <TSpan
-                              key={`arc-${index}-slice-${j}`}
-                              x={x}
-                              dy={20}
-                              textAnchor="middle">
-                              {number.charAt(j)}
-                            </TSpan>
-                          );
-                        })}
+                        <TSpan
+                          key={`arc-${index}-slice`}
+                          x={x}
+                          dy={fontSize}
+                          textAnchor="middle">
+                          {arc.value}
+                        </TSpan>
                       </SvgText>
                     </G>
                   </G>
@@ -212,22 +215,20 @@ function App(): JSX.Element {
   };
 
   return (
-    <>
-      <View style={{flex: 1}}>
-        <GestureHandlerRootView style={{flex: 1, backgroundColor: 'gray'}}>
-          <PanGestureHandler enabled={enabled} onHandlerStateChange={_onPan}>
-            <View style={styles.container}>
-              {renderSvgView()}
-              {winner && finished ? (
-                <View style={styles.winnerContainer}>
-                  <Text>Winner is: {winner}</Text>
-                </View>
-              ) : null}
-            </View>
-          </PanGestureHandler>
-        </GestureHandlerRootView>
-      </View>
-    </>
+    <View style={{flex: 1}}>
+      <GestureHandlerRootView style={{flex: 1, backgroundColor: 'gray'}}>
+        <PanGestureHandler enabled={enabled} onHandlerStateChange={_onPan}>
+          <View style={styles.container}>
+            {renderSvgView()}
+            {winner && finished ? (
+              <View style={styles.winnerContainer}>
+                <Text>Winner is: {winner}</Text>
+              </View>
+            ) : null}
+          </View>
+        </PanGestureHandler>
+      </GestureHandlerRootView>
+    </View>
   );
 }
 
